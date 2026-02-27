@@ -49,7 +49,7 @@
   </style>
 </head>
 <body>
-  <div id="startScreen" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:radial-gradient(ellipse at center,rgba(10,10,42,0.55) 60%,rgba(5,8,26,0.55) 100%); z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+  <div id="startScreen" style="position:fixed;top:0;left:0;width:100vw;height:100dvh;background:radial-gradient(ellipse at center,rgba(10,10,42,0.55) 60%,rgba(5,8,26,0.55) 100%); z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;">
     <div id="title3d" style="width:420px;height:180px;"></div>
     <div style="color:#fff;font-size:2.6em;font-family:'Orbitron',monospace;text-shadow:0 0 18px #0ff,0 0 30px #00f;margin-bottom:30px;">COSMIC SHOOTER</div>
     <button id="startBtn" style="font-size:2em;padding:18px 60px;background:#0ff;color:#111;border:none;border-radius:16px;box-shadow:0 0 18px #0ff;cursor:pointer;">START</button>
@@ -85,7 +85,9 @@
         let startEnemies = [];
         // スタート画面リサイズ用（グローバル化）
         function resizeStartScreen() {
-          let sw = window.innerWidth, sh = window.innerHeight;
+          let sw = window.innerWidth;
+          let sh = window.innerHeight;
+          if(window.visualViewport) sh = window.visualViewport.height;
           if(!startRenderer || !startCamera) return;
           startRenderer.setSize(sw, sh);
           startCamera.aspect = sw/sh;
@@ -138,6 +140,10 @@
       startRenderer.domElement.style.zIndex = '99';
       startRenderer.domElement.style.pointerEvents = 'none';
       document.body.appendChild(startRenderer.domElement);
+      window.addEventListener('resize', resizeStartScreen);
+      window.addEventListener('orientationchange', resizeStartScreen);
+      window.removeEventListener('resize', resizeStartScreen);
+      window.removeEventListener('orientationchange', resizeStartScreen);
       // --- 自機モデルをスタート画面用に生成 ---
       function createStartPlayer() {
         const group = new THREE.Group();
@@ -422,9 +428,9 @@
           if(isGameOver) return;
           if(mouseDown && mouseStartX !== null && mouseStartY !== null) {
             // 横方向は画面幅20にマッピング（5倍反応）
-            const dx = (e.clientX - mouseStartX) / window.innerWidth * 20 * 4;
+            const dx = (e.clientX - mouseStartX) / window.innerWidth * 20 * 2;
             // 縦方向は画面高8にマッピング（5倍反応・逆方向）
-            const dy = -(e.clientY - mouseStartY) / window.innerHeight * 8 * 4;
+            const dy = -(e.clientY - mouseStartY) / window.innerHeight * 8 * 2;
             let newX = mousePlayerStartX + dx;
             let newY = mousePlayerStartY + dy;
             // 範囲制限
