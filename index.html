@@ -114,10 +114,10 @@
             e.obj.position.x += Math.sin(performance.now()*0.0005+e.rot)*e.speed;
             e.obj.position.y += Math.cos(performance.now()*0.0007+e.rot)*e.speed*0.7;
             // 画面外に出たら戻す
-            if(e.obj.position.x > 16) e.obj.position.x = -16;
-            if(e.obj.position.x < -16) e.obj.position.x = 16;
-            if(e.obj.position.y > 8) e.obj.position.y = -8;
-            if(e.obj.position.y < -8) e.obj.position.y = 8;
+            if(e.obj.position.x > 10) e.obj.position.x = -10;
+            if(e.obj.position.x < -10) e.obj.position.x = 10;
+            if(e.obj.position.y > 8) e.obj.position.y = 0.6;
+            if(e.obj.position.y < 0.6) e.obj.position.y = 8;
           }
           if(startRenderer && startScene && startCamera) startRenderer.render(startScene, startCamera);
         }
@@ -531,7 +531,7 @@
       let colorMain = 0x2222ff, colorSub = 0xff3366, y = null, scale = 1, speed = 7.25, extra = null;
       let shadow = null;
       // Y座標を広範囲ランダム化（全体空間に出現）
-      y = -2 + Math.random()*14; // -2〜12の範囲で上下に広く出現
+      y = Math.random()*7.4 + 0.6; // -2〜12の範囲で上下に広く出現
       if(type===0){
         // 球体型（既存）
         const core = new THREE.Mesh(
@@ -643,7 +643,10 @@
       }
       // 配置
       const z = -35 - Math.random()*4;
-      enemy.position.set((Math.random()-0.5)*20, y, z);
+      let ex = (Math.random()-0.5)*20;
+      if(ex > 10) ex = 10;
+      if(ex < -10) ex = -10;
+      enemy.position.set(ex, y, z);
       enemy.scale.set(scale,scale,scale);
       enemy.userData = {type, speed, extra};
       scene.add(enemy);
