@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmic Shooter 3D</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #05081a; }
+    #score {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font-family: 'Orbitron', monospace;
+      font-size: 2em;
+      text-shadow: 0 0 10px #0ff, 0 0 20px #00f;
+      z-index: 10;
+    }
+    #gameover {
+      display: none;
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 2.5em;
+      background: rgba(0,0,0,0.7);
+      padding: 30px 50px;
+      border-radius: 20px;
+      text-align: center;
+      z-index: 20;
+    }
+    #restartBtn {
+      display: none;
+      position: absolute;
+      top: 75%; /* 60%→75%に下げる */
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.5em;
+      padding: 15px 40px;
+      background: #0ff;
+      color: #111;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      z-index: 21;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">0</div>
+  <div id="timer" style="position:absolute;top:20px;right:40px;color:#fff;font-family:'Orbitron',monospace;font-size:2em;text-shadow:0 0 10px #ff0,0 0 20px #f80;z-index:11;">60</div>
+  <div id="gameover">GAME OVER</div>
+  <button id="restartBtn">リスタート</button>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+  <script>
+    // --- 3D宇宙シューティングのベース ---
+    let scene, camera, renderer, player, bullets = [], enemies = [], score = 0, isGameOver = false;
+    let width = window.innerWidth, height = window.innerHeight;
+    let playerTargetX = 0;
+    let playerTargetY = 1.5;
+    function init() {
+            // 制限時間（秒）
+            window.gameTimeLimit = 60;
+            window.gameTimeLeft = window.gameTimeLimit;
+            document.getElementById('timer').textContent = window.gameTimeLeft;
+            // タイマー処理
+            window.timerInterval = setInterval(()=>{
+              if(isGameOver) return;
+              window.gameTimeLeft--;
+              document.getElementById('timer').textContent = window.gameTimeLeft;
+              if(window.gameTimeLeft<=0){
+                isGameOver = true;
+                // ランク計算
+                let rank = 'D';
+                if(score>=2000) rank='S';
+                else if(score>=1500) rank='A';
+                else if(score>=1000) rank='B';
+                else if(score>=500) rank='C';
+                // スコアを大きく表示
+                document.getElementById('gameover').innerHTML = '<div style="font-size:1.1em;margin-bottom:10px;">TIME UP!</div>'+
+                  '<div style="font-size:2.2em;color:#ff0;text-shadow:0 0 18px #f80,0 0 30px #ff0;">Score: '+score+'</div>'+
+                  '<div style="font-size:2em;margin-top:10px;color:#0ff;text-shadow:0 0 10px #0ff;">RANK: '+rank+'</div>';
+                document.getElementById('gameover').style.display = 'block';
+                document.getElementById('restartBtn').style.display = 'block';
+                clearInterval(window.timerInterval);
+              }
+            },1000);
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x05081a);
+      // 星屑
+        // 星屑を大幅に増やし、広範囲に分布
+        for(let i=0;i<700;i++){
+        const star = new THREE.Mesh(
+          new THREE.SphereGeometry(Math.random()*0.13+0.04,10,10),
+          new THREE.MeshBasicMaterial({color:0xffffff,emissive:0x88aaff})
+        );
+          star.position.set((Math.random()-0.5)*80, (Math.random()-0.5)*45, -Math.random()*180-10);
+        scene.add(star);
+      }
+      camera = new THREE.PerspectiveCamera(70, width/height, 0.1, 2000);
+      camera.position.set(0,3,13);
+      camera.lookAt(0,1.5,0);
+      renderer = new THREE.WebGLRenderer({antialias:true});
+      renderer.setSize(width, height);
+      document.body.appendChild(renderer.domElement);
+      // ライト
+      scene.add(new THREE.AmbientLight(0x99ccff, 0.7));
+      const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+      dir.position.set(5, 10, 10);
+      scene.add(dir);
+      // --- グミシップ風・ヒーロー機体（スケールアップ） ---
+      player = new THREE.Group();
+      // 本体
+      const bodyMain = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3,0.9,2.1),
+        new THREE.MeshStandardMaterial({color:0xff3333,metalness:0.7,roughness:0.15})
+      );
+      player.add(bodyMain);
+      const bodySub = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9,0.7,1.2),
+        new THREE.MeshStandardMaterial({color:0xffd700,metalness:0.7,roughness:0.18})
+      );
+      bodySub.position.z = 1.2;
+      player.add(bodySub);
+      // コックピット
+      const cockpit = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 18, 18),
+        new THREE.MeshStandardMaterial({color:0x00bfff,metalness:0.5,roughness:0.1,transparent:true,opacity:0.7,emissive:0x00eaff})
+      );
+      cockpit.position.set(0,0,1.5);
+      player.add(cockpit);
+      // サイドウィング
+      const wingL = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22,1.2,0.55),
+        new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.8,roughness:0.13})
+      );
+      wingL.position.set(-0.75,0,0);
+      wingL.rotation.z = Math.PI/10;
+      player.add(wingL);
+      const wingR = wingL.clone();
+      wingR.position.x *= -1;
+      wingR.rotation.z *= -1;
+      player.add(wingR);
+      // エンジン
+      const engine = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22,0.22,0.55,14),
+        new THREE.MeshStandardMaterial({color:0x3399ff,metalness:0.8,roughness:0.12,emissive:0x0033ff})
+      );
+      engine.position.set(0,0,-1.2);
+      engine.rotation.x = Math.PI/2;
+      player.add(engine);
+      // ディテール
+      const deco1 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25,0.25,0.25),
+        new THREE.MeshStandardMaterial({color:0xffff00,metalness:0.7,roughness:0.18})
+      );
+      deco1.position.set(-0.5,0.38,0);
+      player.add(deco1);
+      const deco2 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25,0.25,0.25),
+        new THREE.MeshStandardMaterial({color:0x00ff99,metalness:0.7,roughness:0.18})
+      );
+      deco2.position.set(0.5,0.38,0);
+      player.add(deco2);
+      // 配置
+      player.position.set(0,1.5,0);
+      scene.add(player);
+      // イベント
+        // ステージ範囲を大幅拡大
+        window.addEventListener('keydown',e=>{
+          if(isGameOver)return;
+          if(e.code==='ArrowLeft' && playerTargetX>-10)playerTargetX-=1.2;
+          if(e.code==='ArrowRight' && playerTargetX<10)playerTargetX+=1.2;
+          if(e.code==='ArrowUp' && playerTargetY<8)playerTargetY+=0.8;
+          if(e.code==='ArrowDown' && playerTargetY>0.6)playerTargetY-=0.8;
+          if(e.code==='Space')shoot();
+        });
+      // UI
+      document.getElementById('score').textContent = '0';
+      document.getElementById('gameover').style.display = 'none';
+      document.getElementById('restartBtn').style.display = 'none';
+      document.getElementById('restartBtn').onclick = ()=>location.reload();
+      // 敵生成
+      // 敵の出現頻度を大幅アップ（約0.7秒ごと）
+      setInterval(()=>{if(!isGameOver)addEnemy();},700);
+      // さらに初期化時に数体まとめて出現
+      for(let i=0;i<4;i++) addEnemy();
+    }
+    function shoot(){
+      // --- スケールアップした発光弾 ---
+      // --- 幅広ビーム弾 ---
+        // --- 細い球体ビーム弾（元に戻す） ---
+        const bullet = new THREE.Mesh(
+          new THREE.SphereGeometry(0.32, 18, 18),
+          new THREE.MeshStandardMaterial({color:0xffff33,emissive:0xffff99,emissiveIntensity:1.0,transparent:true,opacity:0.85})
+        );
+        bullet.position.copy(player.position);
+        // 弾道エフェクト（光の尾）
+        const trail = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.16,0.22,1.2,12),
+          new THREE.MeshStandardMaterial({color:0xffff99,emissive:0xffff99,emissiveIntensity:0.7,transparent:true,opacity:0.5})
+        );
+        trail.position.set(0,0,-0.6);
+        trail.rotation.x = Math.PI/2;
+        bullet.add(trail);
+        scene.add(bullet);
+        bullets.push(bullet);
+    }
+    function addEnemy(){
+      // --- 敵バリエーション ---
+      const type = Math.floor(Math.random()*4); // 0:球体, 1:棒, 2:円盤, 3:小型
+      const enemy = new THREE.Group();
+      let colorMain = 0x2222ff, colorSub = 0xff3366, y = null, scale = 1, speed = 7.25, extra = null;
+      let shadow = null;
+      // Y座標を広範囲ランダム化（全体空間に出現）
+      y = -2 + Math.random()*14; // -2〜12の範囲で上下に広く出現
+      if(type===0){
+        // 球体型（既存）
+        const core = new THREE.Mesh(
+          new THREE.SphereGeometry(0.6, 20, 20),
+          new THREE.MeshStandardMaterial({color:colorMain,metalness:0.8,roughness:0.13,emissive:0x3366ff,emissiveIntensity:0.5})
+        );
+        enemy.add(core);
+        // シャドウ
+        shadow = new THREE.Mesh(
+          new THREE.CircleGeometry(0.55, 18),
+          new THREE.MeshBasicMaterial({color:0x000000, opacity:0.22, transparent:true})
+        );
+        shadow.rotation.x = -Math.PI/2;
+        shadow.position.y = -0.65;
+        enemy.add(shadow);
+        const glow = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 14, 14),
+          new THREE.MeshStandardMaterial({color:colorSub,emissive:colorSub,emissiveIntensity:0.9,transparent:true,opacity:0.7})
+        );
+        glow.position.z = 0.22;
+        enemy.add(glow);
+        const wingL = new THREE.Mesh(
+          new THREE.BoxGeometry(0.15,0.9,0.32),
+          new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.7,roughness:0.18})
+        );
+        wingL.position.set(-0.6,0,0);
+        wingL.rotation.z = Math.PI/8;
+        enemy.add(wingL);
+        const wingR = wingL.clone();
+        wingR.position.x *= -1;
+        wingR.rotation.z *= -1;
+        enemy.add(wingR);
+        const thrusterObj = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.13,0.13,0.32,12),
+          new THREE.MeshStandardMaterial({color:0xffd700,metalness:0.8,roughness:0.18,emissive:0xffd700})
+        );
+        thrusterObj.position.set(0,-0.6,0);
+        thrusterObj.rotation.x = Math.PI/2;
+        enemy.add(thrusterObj);
+      }else if(type===1){
+        // 棒型（縦長）
+        colorMain = 0x00ffcc; colorSub = 0x00ffff; scale = 1.2;
+        const stick = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22,0.22,2.2,16),
+          new THREE.MeshStandardMaterial({color:colorMain,metalness:0.7,roughness:0.18,emissive:colorSub,emissiveIntensity:0.7})
+        );
+        enemy.add(stick);
+        // シャドウ
+        shadow = new THREE.Mesh(
+          new THREE.CircleGeometry(0.32, 16),
+          new THREE.MeshBasicMaterial({color:0x000000, opacity:0.18, transparent:true})
+        );
+        shadow.rotation.x = -Math.PI/2;
+        shadow.position.y = -1.2;
+        enemy.add(shadow);
+        const cap1 = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 12, 12),
+          new THREE.MeshStandardMaterial({color:colorSub,emissive:colorSub,emissiveIntensity:0.7,transparent:true,opacity:0.7})
+        );
+        cap1.position.y = 1.1;
+        enemy.add(cap1);
+        const cap2 = cap1.clone();
+        cap2.position.y = -1.1;
+        enemy.add(cap2);
+        speed = 5.5;
+      }else if(type===2){
+        // 円盤型（回転）
+        colorMain = 0xff8800; colorSub = 0xffff00; scale = 1.1;
+        const disk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.7,0.7,0.18,24),
+          new THREE.MeshStandardMaterial({color:colorMain,metalness:0.8,roughness:0.13,emissive:colorSub,emissiveIntensity:0.7})
+        );
+        enemy.add(disk);
+        // シャドウ
+        shadow = new THREE.Mesh(
+          new THREE.CircleGeometry(0.55, 18),
+          new THREE.MeshBasicMaterial({color:0x000000, opacity:0.18, transparent:true})
+        );
+        shadow.rotation.x = -Math.PI/2;
+        shadow.position.y = -0.13;
+        enemy.add(shadow);
+        const core = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 14, 14),
+          new THREE.MeshStandardMaterial({color:colorSub,emissive:colorSub,emissiveIntensity:0.8,transparent:true,opacity:0.7})
+        );
+        core.position.z = 0.1;
+        enemy.add(core);
+        extra = 'spin';
+        speed = 6.2;
+      }else{
+        // 小型高速型
+        colorMain = 0xff44cc; colorSub = 0xffffff; scale = 0.6;
+        const mini = new THREE.Mesh(
+          new THREE.SphereGeometry(0.32, 14, 14),
+          new THREE.MeshStandardMaterial({color:colorMain,metalness:0.7,roughness:0.18,emissive:colorSub,emissiveIntensity:0.7})
+        );
+        enemy.add(mini);
+        // シャドウ
+        shadow = new THREE.Mesh(
+          new THREE.CircleGeometry(0.18, 12),
+          new THREE.MeshBasicMaterial({color:0x000000, opacity:0.15, transparent:true})
+        );
+        shadow.rotation.x = -Math.PI/2;
+        shadow.position.y = -0.33;
+        enemy.add(shadow);
+        speed = 11.5;
+        // 小型も同じ範囲で出現
+        y = -2 + Math.random()*14;
+      }
+      // 配置
+      const z = -35 - Math.random()*4;
+      enemy.position.set((Math.random()-0.5)*20, y, z);
+      enemy.scale.set(scale,scale,scale);
+      enemy.userData = {type, speed, extra};
+      scene.add(enemy);
+      enemies.push(enemy);
+    }
+    function animate(){
+      // --- deltaTimeでぬるぬる制御 ---
+      let prevTime = animate.prevTime || performance.now();
+      const now = performance.now();
+      const delta = Math.min((now - prevTime) * 0.001, 0.05); // 秒
+      animate.prevTime = now;
+      requestAnimationFrame(animate);
+      if(!isGameOver){
+        // 自機ぬるぬる移動（X・Y両軸）
+        if(player){
+          player.position.x = playerTargetX;
+          player.position.y = playerTargetY;
+        }
+        // タイムアップ時の即時終了
+        if(window.gameTimeLeft<=0){
+          isGameOver = true;
+          // ランク計算
+          let rank = 'D';
+          if(score>=2000) rank='S';
+          else if(score>=1500) rank='A';
+          else if(score>=1000) rank='B';
+          else if(score>=500) rank='C';
+          document.getElementById('gameover').innerHTML = '<div style="font-size:1.1em;margin-bottom:10px;">TIME UP!</div>'+
+            '<div style="font-size:2.2em;color:#ff0;text-shadow:0 0 18px #f80,0 0 30px #ff0;">Score: '+score+'</div>'+
+            '<div style="font-size:2em;margin-top:10px;color:#0ff;text-shadow:0 0 10px #0ff;">RANK: '+rank+'</div>';
+          document.getElementById('gameover').style.display = 'block';
+          document.getElementById('restartBtn').style.display = 'block';
+          return;
+        }
+        // 弾移動（超高速化）
+        for(let i=bullets.length-1;i>=0;i--){
+          bullets[i].position.z-=35*delta;
+          if(bullets[i].position.z<-40){scene.remove(bullets[i]);bullets.splice(i,1);}
+        }
+        // 敵移動＆挙動
+        for(let i=enemies.length-1;i>=0;i--){
+          const e = enemies[i];
+          const t = e.userData.type;
+          const speed = e.userData.speed || 7.25;
+          e.position.z += speed*delta;
+          // 円盤型は回転
+          if(e.userData.extra==='spin'){
+            e.rotation.y += 2.5*delta;
+          }
+          // 衝突判定
+          for(let j=bullets.length-1;j>=0;j--){
+            let hitDist = 1.25;
+            if(t===1) hitDist=1.45; // 棒型
+            if(t===2) hitDist=1.55; // 円盤型
+            if(t===3) hitDist=0.95; // 小型
+            if(e.position.distanceTo(bullets[j].position)<hitDist){
+              scene.remove(e);enemies.splice(i,1);
+              scene.remove(bullets[j]);bullets.splice(j,1);
+              // 敵タイプごとにスコア
+              let addScore = 100;
+              if(t===1) addScore=150;
+              else if(t===2) addScore=200;
+              else if(t===3) addScore=80;
+              score+=addScore;
+              document.getElementById('score').textContent=score;
+              break;
+            }
+          }
+          // プレイヤーと敵
+          let playerDist = 1.3;
+          if(t===1) playerDist=1.45;
+          if(t===2) playerDist=1.55;
+          if(t===3) playerDist=0.95;
+          if(e&&e.position.distanceTo(player.position)<playerDist){
+            isGameOver=true;
+              // ランク計算（生存時間も加味）
+              let rank = 'D';
+              const timeSurvived = window.gameTimeLimit - window.gameTimeLeft;
+              if(score>=2000 && timeSurvived>=55) rank='S';
+              else if(score>=1500 && timeSurvived>=45) rank='A';
+              else if(score>=1000 && timeSurvived>=30) rank='B';
+              else if(score>=500 && timeSurvived>=15) rank='C';
+            document.getElementById('gameover').innerHTML = '<div style="font-size:1.1em;margin-bottom:10px;">GAME OVER</div>'+
+              '<div style="font-size:2.2em;color:#ff0;text-shadow:0 0 18px #f80,0 0 30px #ff0;">Score: '+score+'</div>'+
+              '<div style="font-size:2em;margin-top:10px;color:#0ff;text-shadow:0 0 10px #0ff;">RANK: '+rank+'</div>';
+            document.getElementById('gameover').style.display='block';
+            document.getElementById('restartBtn').style.display='block';
+          }
+          if(e&&e.position.z>10){scene.remove(e);enemies.splice(i,1);}
+        }
+      }
+      renderer.render(scene,camera);
+    }
+    window.addEventListener('resize',()=>{
+      width=window.innerWidth;height=window.innerHeight;
+      camera.aspect=width/height;camera.updateProjectionMatrix();
+      renderer.setSize(width,height);
+    });
+    init();
+    animate();
+  </script>
+</body>
+</html>
