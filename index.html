@@ -49,17 +49,243 @@
   </style>
 </head>
 <body>
+  <div id="startScreen" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:radial-gradient(ellipse at center,rgba(10,10,42,0.55) 60%,rgba(5,8,26,0.55) 100%); z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <div id="title3d" style="width:420px;height:180px;"></div>
+    <div style="color:#fff;font-size:2.6em;font-family:'Orbitron',monospace;text-shadow:0 0 18px #0ff,0 0 30px #00f;margin-bottom:30px;">COSMIC SHOOTER</div>
+    <button id="startBtn" style="font-size:2em;padding:18px 60px;background:#0ff;color:#111;border:none;border-radius:16px;box-shadow:0 0 18px #0ff;cursor:pointer;">START</button>
+    <div style="margin-top:40px;color:#fff;font-size:1.1em;opacity:0.7;">画面タップ/クリックで移動・ショット</div>
+  </div>
   <div id="score">0</div>
   <div id="timer" style="position:absolute;top:20px;right:40px;color:#fff;font-family:'Orbitron',monospace;font-size:2em;text-shadow:0 0 10px #ff0,0 0 20px #f80;z-index:11;">60</div>
   <div id="gameover">GAME OVER</div>
   <button id="restartBtn">リスタート</button>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
-  <script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+  import * as THREE from "three";
+  import { FontLoader } from "three/addons/loaders/FontLoader.js";
+  import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
+  window.THREE = THREE;
+  window.FontLoader = FontLoader;
+  window.TextGeometry = TextGeometry;
     // --- 3D宇宙シューティングのベース ---
     let scene, camera, renderer, player, bullets = [], enemies = [], score = 0, isGameOver = false;
     let width = window.innerWidth, height = window.innerHeight;
     let playerTargetX = 0;
     let playerTargetY = 1.5;
+    let gameStarted = false;
+    // --- スタート画面用3Dアニメーション ---
+    let startScene, startCamera, startRenderer, startLogo, startStars = [], startAnimId;
+        let startEnemies = [];
+        // スタート画面リサイズ用（グローバル化）
+        function resizeStartScreen() {
+          let sw = window.innerWidth, sh = window.innerHeight;
+          if(!startRenderer || !startCamera) return;
+          startRenderer.setSize(sw, sh);
+          startCamera.aspect = sw/sh;
+          startCamera.updateProjectionMatrix();
+        }
+
+        // スタート画面アニメーション（グローバル化）
+        function animateStart() {
+          startAnimId = requestAnimationFrame(animateStart);
+          if(startLogo) {
+            startLogo.rotation.y += 0.025;
+            startLogo.rotation.x += 0.01;
+            startLogo.position.x = Math.sin(performance.now()*0.0007)*6;
+            startLogo.position.y = Math.cos(performance.now()*0.0005)*2.5;
+          }
+          for(const s of startStars) {
+            s.position.z += 0.22;
+            if(s.position.z>10) s.position.z = -40;
+          }
+          // 敵も回転しながら広範囲に動かす
+          for(const e of startEnemies) {
+            if(e.type===2) e.obj.rotation.y += 0.07;
+            else e.obj.rotation.y += 0.025;
+            e.obj.position.x += Math.sin(performance.now()*0.0005+e.rot)*e.speed;
+            e.obj.position.y += Math.cos(performance.now()*0.0007+e.rot)*e.speed*0.7;
+            // 画面外に出たら戻す
+            if(e.obj.position.x > 16) e.obj.position.x = -16;
+            if(e.obj.position.x < -16) e.obj.position.x = 16;
+            if(e.obj.position.y > 8) e.obj.position.y = -8;
+            if(e.obj.position.y < -8) e.obj.position.y = 8;
+          }
+          if(startRenderer && startScene && startCamera) startRenderer.render(startScene, startCamera);
+        }
+    function showStartScreen() {
+      // 3Dロゴ用Three.js
+      // 画面全体に3Dアニメーションを表示
+      startScene = new THREE.Scene();
+      let sw = window.innerWidth, sh = window.innerHeight;
+      startCamera = new THREE.PerspectiveCamera(60, sw/sh, 0.1, 100);
+      startCamera.position.set(0,0,14);
+      startRenderer = new THREE.WebGLRenderer({alpha:true,antialias:true});
+      startRenderer.setSize(sw, sh);
+      startRenderer.domElement.style.position = 'fixed';
+      startRenderer.domElement.style.top = '0';
+      startRenderer.domElement.style.left = '0';
+      startRenderer.domElement.style.zIndex = '99';
+      startRenderer.domElement.style.position = 'fixed';
+      startRenderer.domElement.style.top = '0';
+      startRenderer.domElement.style.left = '0';
+      startRenderer.domElement.style.zIndex = '99';
+      startRenderer.domElement.style.pointerEvents = 'none';
+      document.body.appendChild(startRenderer.domElement);
+      // --- 自機モデルをスタート画面用に生成 ---
+      function createStartPlayer() {
+        const group = new THREE.Group();
+        // 本体
+        const bodyMain = new THREE.Mesh(
+          new THREE.BoxGeometry(1.3,0.9,2.1),
+          new THREE.MeshStandardMaterial({color:0xff3333,metalness:0.7,roughness:0.15})
+        );
+        group.add(bodyMain);
+        const bodySub = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9,0.7,1.2),
+          new THREE.MeshStandardMaterial({color:0xffd700,metalness:0.7,roughness:0.18})
+        );
+        bodySub.position.z = 1.2;
+        group.add(bodySub);
+        const cockpit = new THREE.Mesh(
+          new THREE.SphereGeometry(0.38, 18, 18),
+          new THREE.MeshStandardMaterial({color:0x00bfff,metalness:0.5,roughness:0.1,transparent:true,opacity:0.7,emissive:0x00eaff})
+        );
+        cockpit.position.set(0,0,1.5);
+        group.add(cockpit);
+        const wingL = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22,1.2,0.55),
+          new THREE.MeshStandardMaterial({color:0xffffff,metalness:0.8,roughness:0.13})
+        );
+        wingL.position.set(-0.75,0,0);
+        wingL.rotation.z = Math.PI/10;
+        group.add(wingL);
+        const wingR = wingL.clone();
+        wingR.position.x *= -1;
+        wingR.rotation.z *= -1;
+        group.add(wingR);
+        const engine = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22,0.22,0.55,14),
+          new THREE.MeshStandardMaterial({color:0x3399ff,metalness:0.8,roughness:0.12,emissive:0x0033ff})
+        );
+        engine.position.set(0,0,-1.2);
+        engine.rotation.x = Math.PI/2;
+        group.add(engine);
+        const deco1 = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25,0.25,0.25),
+          new THREE.MeshStandardMaterial({color:0xffff00,metalness:0.7,roughness:0.18})
+        );
+        deco1.position.set(-0.5,0.38,0);
+        group.add(deco1);
+        const deco2 = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25,0.25,0.25),
+          new THREE.MeshStandardMaterial({color:0x00ff99,metalness:0.7,roughness:0.18})
+        );
+        deco2.position.set(0.5,0.38,0);
+        group.add(deco2);
+        group.position.set(0,0,0);
+        return group;
+      }
+      startLogo = createStartPlayer();
+      startLogo.position.set(0,0,0);
+      startScene.add(startLogo);
+      // --- 敵を複数ランダム出現 ---
+      startEnemies = [];
+      function createStartEnemy(type) {
+        const enemy = new THREE.Group();
+        let colorMain = 0x2222ff, colorSub = 0xff3366, scale = 1, extra = null;
+        if(type===0){
+          const core = new THREE.Mesh(
+            new THREE.SphereGeometry(0.6, 20, 20),
+            new THREE.MeshStandardMaterial({color:colorMain,metalness:0.8,roughness:0.13,emissive:0x3366ff,emissiveIntensity:0.5})
+          );
+          enemy.add(core);
+        }else if(type===1){
+          colorMain = 0x00ffcc; colorSub = 0x00ffff; scale = 1.2;
+          const stick = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.22,0.22,2.2,16),
+            new THREE.MeshStandardMaterial({color:colorMain,metalness:0.7,roughness:0.18,emissive:colorSub,emissiveIntensity:0.7})
+          );
+          enemy.add(stick);
+        }else if(type===2){
+          colorMain = 0xff8800; colorSub = 0xffff00; scale = 1.1;
+          const disk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.7,0.7,0.18,24),
+            new THREE.MeshStandardMaterial({color:colorMain,metalness:0.8,roughness:0.13,emissive:colorSub,emissiveIntensity:0.7})
+          );
+          enemy.add(disk);
+        }else{
+          colorMain = 0xff44cc; colorSub = 0xffffff; scale = 0.6;
+          const mini = new THREE.Mesh(
+            new THREE.SphereGeometry(0.32, 14, 14),
+            new THREE.MeshStandardMaterial({color:colorMain,metalness:0.7,roughness:0.18,emissive:colorSub,emissiveIntensity:0.7})
+          );
+          enemy.add(mini);
+        }
+        enemy.scale.set(scale,scale,scale);
+        enemy.position.set((Math.random()-0.5)*7, (Math.random()-0.5)*2.5, -Math.random()*7-2);
+        return enemy;
+      }
+      for(let i=0;i<12;i++){
+        const t = Math.floor(Math.random()*4);
+        const e = createStartEnemy(t);
+        // より広範囲に配置
+        e.position.set((Math.random()-0.5)*18, (Math.random()-0.5)*8, -Math.random()*18-2);
+        startScene.add(e);
+        startEnemies.push({obj:e, type:t, rot:Math.random()*Math.PI*2, speed:0.5+Math.random()*1.2});
+      }
+      // 星アニメ
+      // 星を大幅増量＆広範囲に
+      for(let i=0;i<220;i++){
+        const star = new THREE.Mesh(
+          new THREE.SphereGeometry(Math.random()*0.09+0.03,10,10),
+          new THREE.MeshBasicMaterial({color:0xffffff})
+        );
+        star.position.set((Math.random()-0.5)*32, (Math.random()-0.5)*18, -Math.random()*40);
+        startScene.add(star);
+        startStars.push(star);
+      }
+      // ウィンドウリサイズ対応
+      window.addEventListener('resize', resizeStartScreen);
+      const light = new THREE.PointLight(0x00ffff,2.2,60);light.position.set(0,12,18);startScene.add(light);
+      // アニメーション開始
+      animateStart();
+    }
+    function hideStartScreen() {
+      document.getElementById('startScreen').style.display = 'none';
+      if(startAnimId) cancelAnimationFrame(startAnimId);
+      // startStars, startEnemiesのThree.jsオブジェクトをシーンから削除
+      if(startScene) {
+        for(const s of startStars) startScene.remove(s);
+        for(const e of startEnemies) startScene.remove(e.obj);
+      }
+      startStars = [];
+      startEnemies = [];
+      if(startRenderer) { startRenderer.dispose(); if(startRenderer.domElement.parentNode) startRenderer.domElement.parentNode.removeChild(startRenderer.domElement); }
+      window.removeEventListener('resize', resizeStartScreen);
+      startLogo = null;
+      startScene = null;
+      startCamera = null;
+      startRenderer = null;
+    }
+    // スタート画面表示
+    showStartScreen();
+    document.getElementById('startBtn').onclick = function() {
+      hideStartScreen();
+      startGame();
+    };
+    function startGame() {
+      gameStarted = true;
+      init();
+      animate();
+    }
+    // --- ここから下はゲーム本体 ---
     function init() {
             // 制限時間（秒）
             window.gameTimeLimit = 60;
@@ -176,6 +402,90 @@
           if(e.code==='ArrowUp' && playerTargetY<8)playerTargetY+=0.8;
           if(e.code==='ArrowDown' && playerTargetY>0.6)playerTargetY-=0.8;
           if(e.code==='Space')shoot();
+        });
+        // --- タッチ操作対応（スマホ） ---
+        let touchStartX = null, touchStartY = null;
+        let touchPlayerStartX = null, touchPlayerStartY = null;
+        // --- マウス操作対応（PC） ---
+        let mouseDown = false;
+        let mouseStartX = null, mouseStartY = null;
+        let mousePlayerStartX = null, mousePlayerStartY = null;
+        window.addEventListener('mousedown', function(e) {
+          if(isGameOver) return;
+          mouseDown = true;
+          mouseStartX = e.clientX;
+          mouseStartY = e.clientY;
+          mousePlayerStartX = playerTargetX;
+          mousePlayerStartY = playerTargetY;
+        });
+        window.addEventListener('mousemove', function(e) {
+          if(isGameOver) return;
+          if(mouseDown && mouseStartX !== null && mouseStartY !== null) {
+            // 横方向は画面幅20にマッピング（5倍反応）
+            const dx = (e.clientX - mouseStartX) / window.innerWidth * 20 * 4;
+            // 縦方向は画面高8にマッピング（5倍反応・逆方向）
+            const dy = -(e.clientY - mouseStartY) / window.innerHeight * 8 * 4;
+            let newX = mousePlayerStartX + dx;
+            let newY = mousePlayerStartY + dy;
+            // 範囲制限
+            newX = Math.max(-10, Math.min(10, newX));
+            newY = Math.max(0.6, Math.min(8, newY));
+            playerTargetX = newX;
+            playerTargetY = newY;
+          }
+        });
+        window.addEventListener('mouseup', function(e) {
+          if(isGameOver) return;
+          mouseDown = false;
+        });
+        // クリックで弾発射
+        window.addEventListener('click', function(e) {
+          if(isGameOver) return;
+          // UIボタン等は除外
+          if(e.target === document.body || e.target === renderer.domElement) {
+            shoot();
+          }
+        });
+        window.addEventListener('touchstart', function(e) {
+          if(isGameOver) return;
+          if(e.touches.length === 1) {
+            const t = e.touches[0];
+            touchStartX = t.clientX;
+            touchStartY = t.clientY;
+            touchPlayerStartX = playerTargetX;
+            touchPlayerStartY = playerTargetY;
+          }
+        });
+        window.addEventListener('touchmove', function(e) {
+          if(isGameOver) return;
+          if(e.touches.length === 1 && touchStartX !== null && touchStartY !== null) {
+            const t = e.touches[0];
+            // 横方向は画面幅20にマッピング（5倍反応）
+            const dx = (t.clientX - touchStartX) / window.innerWidth * 20 * 5;
+            // 縦方向は画面高8にマッピング（5倍反応・逆方向）
+            const dy = -(t.clientY - touchStartY) / window.innerHeight * 8 * 5;
+            let newX = touchPlayerStartX + dx;
+            let newY = touchPlayerStartY + dy;
+            // 範囲制限
+            newX = Math.max(-10, Math.min(10, newX));
+            newY = Math.max(0.6, Math.min(8, newY));
+            playerTargetX = newX;
+            playerTargetY = newY;
+          }
+        });
+        window.addEventListener('touchend', function(e) {
+          if(isGameOver) return;
+          // タップ（短いタッチ）で弾発射
+          if(e.changedTouches.length === 1 && touchStartX !== null && touchStartY !== null) {
+            // タップ移動量が小さい場合のみ発射
+            const t = e.changedTouches[0];
+            const dx = Math.abs(t.clientX - touchStartX);
+            const dy = Math.abs(t.clientY - touchStartY);
+            if(dx < 15 && dy < 15) {
+              shoot();
+            }
+          }
+          touchStartX = null; touchStartY = null;
         });
       // UI
       document.getElementById('score').textContent = '0';
@@ -426,8 +736,7 @@
       camera.aspect=width/height;camera.updateProjectionMatrix();
       renderer.setSize(width,height);
     });
-    init();
-    animate();
+    // ゲーム本体はstartGame()からのみ開始
   </script>
 </body>
 </html>
