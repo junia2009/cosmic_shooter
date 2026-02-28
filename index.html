@@ -106,6 +106,8 @@
   </style>
 </head>
 <body>
+  <audio id="startBgm" src="audio/space_pop.mp3" loop preload="auto"></audio>
+  <audio id="playBgm" src="audio/cyber_attack.mp3" loop preload="auto"></audio>
   <div id="startScreen">
     <div id="title3d"></div>
     <div class="start-title">COSMIC SHOOTER</div>
@@ -181,6 +183,24 @@
         }
     function showStartScreen() {
       // 3Dロゴ用Three.js
+      // スタートBGM再生（自動再生はやめ、STARTボタンで再生）
+      const startBgm = document.getElementById('startBgm');
+      if(startBgm){
+        startBgm.currentTime = 0;
+        startBgm.volume = 0.7;
+      }
+      // スタート画面クリック/タップで一度だけBGM再生
+      let startBgmPlayed = false;
+      const playStartBgmOnce = () => {
+        if(!startBgmPlayed && startBgm){
+          startBgm.play().catch(()=>{});
+          startBgmPlayed = true;
+        }
+      };
+      const startScreen = document.getElementById('startScreen');
+      if(startScreen){
+        startScreen.addEventListener('pointerdown', playStartBgmOnce, { once: true });
+      }
       // 画面全体に3Dアニメーションを表示
       startScene = new THREE.Scene();
       let sw = window.innerWidth, sh = window.innerHeight;
@@ -323,6 +343,12 @@
     }
     function hideStartScreen() {
       document.getElementById('startScreen').style.display = 'none';
+      // スタートBGM停止
+      const startBgm = document.getElementById('startBgm');
+      if(startBgm){
+        startBgm.pause();
+        startBgm.currentTime = 0;
+      }
       if(startAnimId) cancelAnimationFrame(startAnimId);
       // startStars, startEnemiesのThree.jsオブジェクトをシーンから削除
       if(startScene) {
@@ -341,11 +367,24 @@
     // スタート画面表示
     showStartScreen();
     document.getElementById('startBtn').onclick = function() {
+      // スタートBGM停止
+      const startBgm = document.getElementById('startBgm');
+      if(startBgm){
+        startBgm.pause();
+        startBgm.currentTime = 0;
+      }
       hideStartScreen();
       startGame();
     };
     function startGame() {
       gameStarted = true;
+      // プレイBGM再生
+      const playBgm = document.getElementById('playBgm');
+      if(playBgm){
+        playBgm.currentTime = 0;
+        playBgm.volume = 0.7;
+        playBgm.play().catch(()=>{});
+      }
       init();
       animate();
     }
@@ -843,6 +882,14 @@
             scene.remove(exp.group);
             window.explosions.splice(k,1);
           }
+        }
+      }
+      // ゲームオーバー時にBGM停止
+      if(isGameOver){
+        const playBgm = document.getElementById('playBgm');
+        if(playBgm && !playBgm.paused){
+          playBgm.pause();
+          playBgm.currentTime = 0;
         }
       }
       renderer.render(scene,camera);
