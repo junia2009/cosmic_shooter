@@ -19,6 +19,12 @@ Three.js製の3D宇宙シューティングゲームです。
 - ローカルで動かす場合は httpサーバー経由推奨
   - 例: VSCodeのLive Server拡張、または `python -m http.server`
 
+
+## BGMについて
+- スタート画面BGM: [Space Pop](https://dova-s.jp/bgm/play19118.html)
+- プレイ中BGM: [Cyber Attack](https://dova-s.jp/bgm/play14613.html)
+- 提供: [DOVA-SYNDROME](https://dova-s.jp/)
+
 ## ファイル構成
 - index.html ... ゲーム本体（HTML+JS一体型）
 
