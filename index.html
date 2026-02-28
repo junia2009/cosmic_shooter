@@ -761,6 +761,38 @@
             if(t===2) hitDist=1.55; // 円盤型
             if(t===3) hitDist=0.95; // 小型
             if(e.position.distanceTo(bullets[j].position)<hitDist){
+              // --- 爆発アニメーション ---
+              const explosionParticles = [];
+              const explosionGroup = new THREE.Group();
+              const explosionColor = [0xfff200, 0xff6600, 0xff2222, 0xffffff];
+              for(let p=0;p<18;p++){
+                const mat = new THREE.MeshStandardMaterial({
+                  color: explosionColor[Math.floor(Math.random()*explosionColor.length)],
+                  emissive: 0xffa500,
+                  emissiveIntensity: 0.7,
+                  transparent: true,
+                  opacity: 0.85
+                });
+                const geo = new THREE.SphereGeometry(Math.random()*0.13+0.09, 8, 8);
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.copy(e.position);
+                // ランダムな方向ベクトル
+                mesh.userData = {
+                  velocity: new THREE.Vector3(
+                    (Math.random()-0.5)*2.7,
+                    (Math.random()-0.5)*2.7,
+                    (Math.random()-0.5)*2.7
+                  ),
+                  life: 0.45+Math.random()*0.18
+                };
+                explosionGroup.add(mesh);
+                explosionParticles.push(mesh);
+              }
+              scene.add(explosionGroup);
+              // 爆発アニメーション用リストをwindowに保持
+              if(!window.explosions) window.explosions = [];
+              window.explosions.push({group: explosionGroup, particles: explosionParticles, time: 0});
+
               scene.remove(e);enemies.splice(i,1);
               scene.remove(bullets[j]);bullets.splice(j,1);
               // 敵タイプごとにスコア
@@ -794,6 +826,23 @@
             document.getElementById('restartBtn').style.display='block';
           }
           if(e&&e.position.z>10){scene.remove(e);enemies.splice(i,1);}
+        }
+      }
+      // --- 爆発アニメーションの更新 ---
+      if(window.explosions){
+        for(let k=window.explosions.length-1;k>=0;k--){
+          const exp = window.explosions[k];
+          exp.time += delta;
+          for(const mesh of exp.particles){
+            mesh.position.addScaledVector(mesh.userData.velocity, delta*2.5);
+            mesh.material.opacity -= delta*2.2;
+            if(mesh.material.opacity<0) mesh.material.opacity=0;
+          }
+          // 一定時間経過で削除
+          if(exp.time > 0.55){
+            scene.remove(exp.group);
+            window.explosions.splice(k,1);
+          }
         }
       }
       renderer.render(scene,camera);
