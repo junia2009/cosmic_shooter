@@ -1171,7 +1171,13 @@
     document.addEventListener('DOMContentLoaded', function() {
       // body全体のタッチ長押しを抑制
       document.body.addEventListener('touchstart', function(e) {
-        if (e.touches.length === 1) e.preventDefault();
+        // 除外したい要素のリスト
+        const ignoreSelectors = ['#startBtn', '#restartBtn', '#startScreen button'];
+        let ignore = false;
+        for(const sel of ignoreSelectors) {
+          if (e.target.closest(sel)) ignore = true;
+        }
+        if (!ignore && e.touches.length === 1) e.preventDefault();
       }, { passive: false });
       // gestureイベントも抑制
       document.body.addEventListener('gesturestart', function(e) {
