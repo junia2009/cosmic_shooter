@@ -131,7 +131,7 @@
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.0.0</div>
+        <div class="version">Ver.1.1.0</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
         <div class="start-desc">画面タップ/クリックで移動・ショット</div>
@@ -1026,18 +1026,39 @@
           if(t===3) playerDist=0.95;
           if(e&&e.position.distanceTo(player.position)<playerDist){
             isGameOver=true;
-            // ランク計算（スコアのみ・新基準）
-              let rank = 'D';
-            if(score>=10000) rank='S';
-            else if(score>=8000) rank='A';
-            else if(score>=5000) rank='B';
-            else if(score>=3000) rank='C';
-            else rank='D';
-            document.getElementById('gameover').innerHTML = '<div style="font-size:1.1em;margin-bottom:10px;">GAME OVER</div>'+
-              '<div style="font-size:2.2em;color:#ff0;text-shadow:0 0 18px #f80,0 0 30px #ff0;">Score: '+score+'</div>'+
-              '<div style="font-size:2em;margin-top:10px;color:#0ff;text-shadow:0 0 10px #0ff;">RANK: '+rank+'</div>';
-            document.getElementById('gameover').style.display='block';
-            document.getElementById('restartBtn').style.display='block';
+            // プレイヤー爆発アニメーション
+            const explosionParticles = [];
+            const explosionGroup = new THREE.Group();
+            const explosionColor = [0xfff200, 0xff6600, 0xff2222, 0xffffff];
+            for(let p=0;p<18;p++){
+              const mat = new THREE.MeshStandardMaterial({
+                color: explosionColor[Math.floor(Math.random()*explosionColor.length)],
+                emissive: 0xffa500,
+                emissiveIntensity: 0.7,
+                transparent: true,
+                opacity: 0.85
+              });
+              const geo = new THREE.SphereGeometry(Math.random()*0.13+0.09, 8, 8);
+              const mesh = new THREE.Mesh(geo, mat);
+              mesh.position.copy(player.position);
+              mesh.userData = {
+                velocity: new THREE.Vector3(
+                  (Math.random()-0.5)*2.7,
+                  (Math.random()-0.5)*2.7,
+                  (Math.random()-0.5)*2.7
+                ),
+                life: 1.2+Math.random()*0.4 // 爆発を長めに
+              };
+              explosionGroup.add(mesh);
+              explosionParticles.push(mesh);
+            }
+            scene.add(explosionGroup);
+            if(!window.explosions) window.explosions = [];
+            window.explosions.push({group: explosionGroup, particles: explosionParticles, time: 0, isPlayerExplosion: true});
+            // プレイヤーを消す
+            if(player) scene.remove(player);
+            // リザルト表示は後で
+            window._showResultAfterExplosion = true;
           }
           if(e&&e.position.z>10){scene.remove(e);enemies.splice(i,1);}
         }
@@ -1049,12 +1070,27 @@
           exp.time += delta;
           for(const mesh of exp.particles){
             mesh.position.addScaledVector(mesh.userData.velocity, delta*2.5);
-            mesh.material.opacity -= delta*2.2;
+            mesh.material.opacity -= delta*0.8; // 減衰を遅く
             if(mesh.material.opacity<0) mesh.material.opacity=0;
           }
           // 一定時間経過で削除
-          if(exp.time > 0.55){
+          if(exp.time > (exp.isPlayerExplosion ? 1.2 : 0.55)){
             scene.remove(exp.group);
+            // プレイヤー爆発が終わったらリザルト表示
+            if(exp.isPlayerExplosion && window._showResultAfterExplosion){
+              let rank = 'D';
+              if(score>=10000) rank='S';
+              else if(score>=8000) rank='A';
+              else if(score>=5000) rank='B';
+              else if(score>=3000) rank='C';
+              else rank='D';
+              document.getElementById('gameover').innerHTML = '<div style="font-size:1.1em;margin-bottom:10px;">GAME OVER</div>'+
+                '<div style="font-size:2.2em;color:#ff0;text-shadow:0 0 18px #f80,0 0 30px #ff0;">Score: '+score+'</div>'+
+                '<div style="font-size:2em;margin-top:10px;color:#0ff;text-shadow:0 0 10px #0ff;">RANK: '+rank+'</div>';
+              document.getElementById('gameover').style.display='block';
+              document.getElementById('restartBtn').style.display='block';
+              window._showResultAfterExplosion = false;
+            }
             window.explosions.splice(k,1);
           }
         }
