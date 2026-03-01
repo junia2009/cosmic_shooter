@@ -5,7 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cosmic Shooter 3D</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #05081a; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #05081a;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-user-drag: none;
+      touch-action: manipulation;
+    }
     #score {
       position: absolute;
       top: 20px;
@@ -1155,6 +1164,24 @@
       renderer.setSize(width, height);
     });
     // ゲーム本体はstartGame()からのみ開始
+  </script>
+
+  <script>
+    // iOS長押し対策: 標準動作を抑制
+    document.addEventListener('DOMContentLoaded', function() {
+      // body全体のタッチ長押しを抑制
+      document.body.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) e.preventDefault();
+      }, { passive: false });
+      // gestureイベントも抑制
+      document.body.addEventListener('gesturestart', function(e) {
+        e.preventDefault();
+      });
+      // コンテキストメニュー抑制
+      document.body.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+      });
+    });
   </script>
 </body>
 </html>
