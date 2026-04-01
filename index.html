@@ -131,7 +131,7 @@
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.1.0</div>
+        <div class="version">Ver.1.2.0</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
         <div class="start-desc">画面タップ/クリックで移動・ショット</div>
@@ -233,11 +233,14 @@
   import * as THREE from "three";
   import { FontLoader } from "three/addons/loaders/FontLoader.js";
   import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
+  import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+  import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+  import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
   window.THREE = THREE;
   window.FontLoader = FontLoader;
   window.TextGeometry = TextGeometry;
     // --- 3D宇宙シューティングのベース ---
-    let scene, camera, renderer, player, bullets = [], enemies = [], score = 0, isGameOver = false;
+    let scene, camera, renderer, composer, player, bullets = [], enemies = [], score = 0, isGameOver = false;
     let width = window.innerWidth, height = window.innerHeight;
     let playerTargetX = 0;
     let playerTargetY = 1.5;
@@ -593,22 +596,43 @@
       }
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x05081a);
-      // 星屑
-        // 星屑を大幅に増やし、広範囲に分布
-        for(let i=0;i<700;i++){
+      // 星屑（レイヤード・輝度バリエーション）
+      const starColors = [0xffffff, 0xaaddff, 0xffd0a0, 0xaaffdd];
+      for(let i=0;i<900;i++){
+        const bright = Math.random();
+        const r = bright > 0.97 ? (Math.random()*0.18+0.12) : (Math.random()*0.07+0.025);
+        const col = bright > 0.97 ? starColors[Math.floor(Math.random()*starColors.length)] : 0xffffff;
         const star = new THREE.Mesh(
-          new THREE.SphereGeometry(Math.random()*0.13+0.04,10,10),
-          new THREE.MeshBasicMaterial({color:0xffffff})
+          new THREE.SphereGeometry(r, 6, 6),
+          new THREE.MeshBasicMaterial({color: col})
         );
-          star.position.set((Math.random()-0.5)*80, (Math.random()-0.5)*45, -Math.random()*180-10);
+        star.position.set((Math.random()-0.5)*100, (Math.random()-0.5)*55, -Math.random()*200-10);
         scene.add(star);
+      }
+      // ネビュラ（星雲）: 大きな半透明の発光プレーン
+      const nebulaColors = [0x110033, 0x002244, 0x001122, 0x220022];
+      for(let ni=0;ni<6;ni++){
+        const nbMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(90+Math.random()*80, 55+Math.random()*50),
+          new THREE.MeshBasicMaterial({color:nebulaColors[ni%nebulaColors.length], transparent:true, opacity:0.13+Math.random()*0.14, depthWrite:false, side:THREE.DoubleSide})
+        );
+        nbMesh.position.set((Math.random()-0.5)*40, (Math.random()-0.5)*25, -80-Math.random()*100);
+        nbMesh.rotation.z = Math.random()*Math.PI;
+        scene.add(nbMesh);
       }
       camera = new THREE.PerspectiveCamera(70, width/height, 0.1, 2000);
       camera.position.set(0,3,13);
       camera.lookAt(0,1.5,0);
       renderer = new THREE.WebGLRenderer({antialias:true});
       renderer.setSize(width, height);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.1;
       document.body.appendChild(renderer.domElement);
+      // EffectComposer + Bloom
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 1.4, 0.5, 0.70);
+      composer.addPass(bloomPass);
       // ライト
       scene.add(new THREE.AmbientLight(0x99ccff, 0.7));
       const dir = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -668,6 +692,22 @@
       );
       deco2.position.set(0.5,0.38,0);
       player.add(deco2);
+      // エンジン炎（パルスアニメーション）
+      const engineFlame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.22, 1.1, 10),
+        new THREE.MeshStandardMaterial({color:0x0088ff, emissive:0x004cff, emissiveIntensity:3.0, transparent:true, opacity:0.85})
+      );
+      engineFlame.position.set(0, 0, -1.85);
+      engineFlame.rotation.x = Math.PI/2;
+      engineFlame.name = 'engineFlame';
+      player.add(engineFlame);
+      const engineGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 8, 8),
+        new THREE.MeshStandardMaterial({color:0x33aaff, emissive:0x33aaff, emissiveIntensity:2.5, transparent:true, opacity:0.55})
+      );
+      engineGlow.position.set(0, 0, -1.6);
+      engineGlow.name = 'engineGlow';
+      player.add(engineGlow);
       // 配置
       player.position.set(0,1.5,0);
       scene.add(player);
@@ -782,13 +822,13 @@
         // --- 細い球体ビーム弾（元に戻す） ---
         const bullet = new THREE.Mesh(
           new THREE.SphereGeometry(0.32, 18, 18),
-          new THREE.MeshStandardMaterial({color:0xffff33,emissive:0xffff99,emissiveIntensity:1.0,transparent:true,opacity:0.85})
+          new THREE.MeshStandardMaterial({color:0xffff33,emissive:0xffff99,emissiveIntensity:2.5,transparent:true,opacity:0.92})
         );
         bullet.position.copy(player.position);
         // 弾道エフェクト（光の尾）
         const trail = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.16,0.22,1.2,12),
-          new THREE.MeshStandardMaterial({color:0xffff99,emissive:0xffff99,emissiveIntensity:0.7,transparent:true,opacity:0.5})
+          new THREE.CylinderGeometry(0.14,0.22,1.5,12),
+          new THREE.MeshStandardMaterial({color:0xffff99,emissive:0xffff33,emissiveIntensity:1.8,transparent:true,opacity:0.65})
         );
         trail.position.set(0,0,-0.6);
         trail.rotation.x = Math.PI/2;
@@ -936,6 +976,18 @@
         if(player){
           player.position.x = playerTargetX;
           player.position.y = playerTargetY;
+          // エンジン炎アニメーション
+          const fl = player.getObjectByName('engineFlame');
+          const gl = player.getObjectByName('engineGlow');
+          if(fl){
+            const pulse = 0.85 + 0.3*Math.sin(performance.now()*0.015);
+            fl.scale.set(pulse, 1.15+pulse*0.3, pulse);
+            fl.material.emissiveIntensity = 2.5 + pulse;
+          }
+          if(gl){
+            const gp = 0.7 + 0.4*Math.sin(performance.now()*0.018+1.5);
+            gl.scale.setScalar(gp);
+          }
         }
         // タイムアップ時の即時終了
         if(window.gameTimeLeft<=0){
@@ -1006,6 +1058,15 @@
               // 爆発アニメーション用リストをwindowに保持
               if(!window.explosions) window.explosions = [];
               window.explosions.push({group: explosionGroup, particles: explosionParticles, time: 0});
+              // シュックウェーブリング
+              const swRing = new THREE.Mesh(
+                new THREE.RingGeometry(0.05, 0.4, 24),
+                new THREE.MeshBasicMaterial({color:0xffaa22, transparent:true, opacity:0.88, side:THREE.DoubleSide})
+              );
+              swRing.position.copy(e.position);
+              scene.add(swRing);
+              if(!window.shockwaves) window.shockwaves = [];
+              window.shockwaves.push({mesh:swRing, time:0});
 
               scene.remove(e);enemies.splice(i,1);
               scene.remove(bullets[j]);bullets.splice(j,1);
@@ -1092,6 +1153,21 @@
               window._showResultAfterExplosion = false;
             }
             window.explosions.splice(k,1);
+          }
+        }
+      }
+      // シュックウェーブ更新
+      if(window.shockwaves){
+        for(let k=window.shockwaves.length-1;k>=0;k--){
+          const sw = window.shockwaves[k];
+          sw.time += delta;
+          const progress = Math.min(sw.time/0.35, 1);
+          const s = 1 + progress*16;
+          sw.mesh.scale.set(s,s,s);
+          sw.mesh.material.opacity = 0.88*(1-progress);
+          if(sw.time >= 0.35){
+            scene.remove(sw.mesh);
+            window.shockwaves.splice(k,1);
           }
         }
       }
@@ -1189,7 +1265,7 @@
           scene.remove(item); items.splice(i,1);
         }
       }
-      renderer.render(scene,camera);
+      composer.render();
     }
     window.addEventListener('resize',()=>{
       width = window.innerWidth;
@@ -1198,6 +1274,7 @@
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+      if(composer) composer.setSize(width, height);
   });
 
   // orientationchangeにも対応
@@ -1208,6 +1285,7 @@
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+      if(composer) composer.setSize(width, height);
     });
     // ゲーム本体はstartGame()からのみ開始
   </script>
