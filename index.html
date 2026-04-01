@@ -162,23 +162,23 @@
     /* リザルト横画面対応 */
     @media (max-height: 500px) and (orientation: landscape) {
       #resultCard {
-        flex-direction: row;
         display: flex;
+        flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
         align-items: center;
-        gap: 8px 28px;
-        padding: 16px 28px;
-        max-width: 600px;
+        gap: 4px 0;
+        padding: 14px 24px;
+        max-width: 520px;
       }
-      .result-title { width: 100%; font-size: 1.1em; margin-bottom: 6px; }
-      .result-divider { width: 100%; margin-bottom: 8px; }
-      .result-score-area { flex: 1; min-width: 140px; }
-      .result-score-value { font-size: 1.8em; margin-bottom: 8px; }
-      .result-rank-area { flex: 0 0 auto; margin-bottom: 8px; }
-      .result-rank-badge { width: 56px; height: 56px; font-size: 1.6em; }
-      .result-actions { width: 100%; }
-      #restartBtn { font-size: 1em; padding: 10px 36px; }
+      .result-title { width: 100%; font-size: 1.1em; margin-bottom: 4px; }
+      .result-divider { width: 100%; margin-bottom: 6px; }
+      .result-score-area { flex: 1 1 50%; text-align: center; }
+      .result-score-value { font-size: 1.8em; margin-bottom: 6px; }
+      .result-rank-area { flex: 1 1 50%; text-align: center; margin-bottom: 6px; }
+      .result-rank-badge { width: 52px; height: 52px; font-size: 1.5em; }
+      .result-actions { width: 100%; text-align: center; }
+      #restartBtn { font-size: 1em; padding: 8px 32px; }
     }
 
     /* === スタート画面 === */
@@ -342,7 +342,7 @@
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.4.0</div>
+        <div class="version">Ver.1.4.1</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
         <div class="start-desc">画面タップ/クリックで移動・ショット</div>
