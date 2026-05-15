@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icon-180.png">
+  <!-- 古いブラウザ向け: HTMLのキャッシュ再検証を促す（実際の制御は Service Worker と HTTPヘッダ） -->
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <link rel="apple-touch-icon" href="icon-180.png?v=1.6.1">
   <title>Cosmic Shooter 3D</title>
   <style>
     /* === ベース === */
@@ -394,15 +398,15 @@
   </style>
 </head>
 <body>
-  <audio id="startBgm" src="audio/space_pop.mp3" loop preload="auto"></audio>
-  <audio id="playBgm" src="audio/cyber_attack.mp3" loop preload="auto"></audio>
+  <audio id="startBgm" src="audio/space_pop.mp3?v=1.6.1" loop preload="auto"></audio>
+  <audio id="playBgm" src="audio/cyber_attack.mp3?v=1.6.1" loop preload="auto"></audio>
 
   <div id="startScreen">
     <div class="start-flex">
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.6.0</div>
+        <div class="version">Ver.1.6.1</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
         <div class="start-desc">スマホ：ドラッグで移動 / FIREボタン長押しで連射</div>
@@ -1593,6 +1597,43 @@
   </script>
 
   <script>
+    // Service Worker 登録: 新バージョン公開時、次回起動時に自動反映させる
+    // - HTMLは network-first（SW内）で常に最新を取りに行く
+    // - スタート画面のときだけSW切替時にリロード（ゲーム中の中断を回避）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          try { reg.update(); } catch (e) {}
+          // 長時間プレイ中もたまに更新チェック
+          setInterval(function () { try { reg.update(); } catch (e) {} }, 10 * 60 * 1000);
+
+          // 新SWのインストール完了を検知 → 即アクティブ化を指示
+          reg.addEventListener('updatefound', function () {
+            var newSW = reg.installing;
+            if (!newSW) return;
+            newSW.addEventListener('statechange', function () {
+              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                try { newSW.postMessage({ type: 'SKIP_WAITING' }); } catch (e) {}
+              }
+            });
+          });
+        }).catch(function (e) {
+          console.warn('SW register failed:', e);
+        });
+
+        // SWが切り替わったらスタート画面のみ自動リロード（ゲーム中は次回起動まで待つ）
+        var reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (reloading) return;
+          var startEl = document.getElementById('startScreen');
+          var onStart = startEl && window.getComputedStyle(startEl).display !== 'none';
+          if (!onStart) return;
+          reloading = true;
+          window.location.reload();
+        });
+      });
+    }
+
     // iOS長押し対策
     document.addEventListener('DOMContentLoaded', function () {
       var ignoreSelectors = ['#startBtn', '#restartBtn', '#startScreen button', '#fireBtn', '#mobileControls'];
