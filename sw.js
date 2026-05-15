@@ -5,7 +5,7 @@
 //  - 静的アセット（音声・アイコン・JS等）は cache-first で軽量化
 //  - バージョン文字列でキャッシュキーを変えるため、デプロイ時に古いキャッシュは自動破棄
 
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 const CACHE_NAME = 'cosmic-shooter-' + VERSION;
 
 const STATIC_ASSETS = [

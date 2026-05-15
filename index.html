@@ -406,7 +406,7 @@
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.6.1</div>
+        <div class="version">Ver.1.6.2</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
         <div class="start-desc">スマホ：ドラッグで移動 / FIREボタン長押しで連射</div>
@@ -477,6 +477,10 @@
   const TIME_LIMIT   = 60;
   const TIME_MAX     = 99;
   const FIRE_INTERVAL_MS = 130;
+  // 操作感度倍率: 1.0 = 指/カーソル の動きと自機の動きが 1:1（鈍く感じる）
+  // 値を大きくすると小さい動きで大きく動く
+  const TOUCH_SENSITIVITY = 2.5;
+  const MOUSE_SENSITIVITY = 1.5;
   const EXPLOSION_COLORS = [0xfff200, 0xff6600, 0xff2222, 0xffffff];
   const STAR_COLORS      = [0xffffff, 0xaaddff, 0xffd0a0, 0xaaffdd];
   const NEBULA_COLORS    = [0x110033, 0x002244, 0x001122, 0x220022];
@@ -1215,8 +1219,8 @@
     window.addEventListener('mousemove', function (e) {
       if (isGameOver || !mouseDown) return;
       const s = getUnitsPerPixel();
-      const dx = (e.clientX - mouseStartX) * s.x;
-      const dy = -(e.clientY - mouseStartY) * s.y;
+      const dx = (e.clientX - mouseStartX) * s.x * MOUSE_SENSITIVITY;
+      const dy = -(e.clientY - mouseStartY) * s.y * MOUSE_SENSITIVITY;
       if (Math.abs(e.clientX - mouseStartX) + Math.abs(e.clientY - mouseStartY) > 6) {
         mouseDragged = true;
       }
@@ -1265,8 +1269,8 @@
       const t = findTouch(e.touches, moveTouchId);
       if (!t) return;
       const s = getUnitsPerPixel();
-      const dx = (t.clientX - touchStartX) * s.x;
-      const dy = -(t.clientY - touchStartY) * s.y;
+      const dx = (t.clientX - touchStartX) * s.x * TOUCH_SENSITIVITY;
+      const dy = -(t.clientY - touchStartY) * s.y * TOUCH_SENSITIVITY;
       playerTargetX = clamp(touchPlayerStartX + dx, -STAGE_X, STAGE_X);
       playerTargetY = clamp(touchPlayerStartY + dy, STAGE_Y_MIN, STAGE_Y_MAX);
     }, { passive: true });
