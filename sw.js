@@ -1,14 +1,20 @@
 // Cosmic Shooter 3D - Service Worker
-// 役割:
-//  - HTML（ナビゲーション要求）は network-first で最新を取りに行く
-//    → 新バージョンが公開されたら次回起動時に自動反映される
-//  - 静的アセット（音声・アイコン・JS等）は cache-first で軽量化
-//  - バージョン文字列でキャッシュキーを変えるため、デプロイ時に古いキャッシュは自動破棄
+//
+// 更新フロー（"2回開けば反映" パターン）:
+//   1. ユーザーがアプリを開く → ブラウザが毎回 sw.js を取得（updateViaCache:'none' で確実に）
+//   2. CACHE 文字列の差分でブラウザが新SWを「waiting」状態でインストール
+//   3. install で self.skipWaiting() → 即座に activate 状態へ昇格
+//   4. activate で旧キャッシュ削除 + self.clients.claim() で既存タブを掌握
+//   5. ただし「現在開いているページ」自体はもう旧HTMLで描画されているので、
+//      実際に新版を見るには 1度アプリを閉じてもう1度開く必要がある（=2回開く）
+//
+// 新バージョンを出すときの手順:
+//   - この CACHE 文字列を必ず変更（例: v1.6.3 → v1.6.4）
+//   - その変更1つだけで activate 時に旧キャッシュが自動で破棄される
 
-const VERSION = '1.6.2';
-const CACHE_NAME = 'cosmic-shooter-' + VERSION;
+const CACHE = 'cosmic-shooter-v1.6.3';
 
-const STATIC_ASSETS = [
+const FILES = [
   './',
   './index.html',
   './icon-180.png',
@@ -18,37 +24,22 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // タブを閉じる待ちをスキップして即時アクティブ化
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_ASSETS).catch(() => {}))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(FILES))
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    Promise.all([
-      caches.keys().then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-      ),
-      self.clients.claim(),
-    ])
+    caches.keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      )
+      .then(() => self.clients.claim())
   );
 });
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
-function isHtmlRequest(req, url) {
-  if (req.mode === 'navigate') return true;
-  if (url.pathname.endsWith('.html')) return true;
-  if (url.pathname === '/' || url.pathname.endsWith('/')) return true;
-  const accept = req.headers.get('accept') || '';
-  return accept.indexOf('text/html') !== -1;
-}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -57,38 +48,11 @@ self.addEventListener('fetch', (event) => {
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
 
-  // クロスオリジン（Three.js CDN等）はブラウザ任せ
+  // 別オリジン（Three.js CDN等）はブラウザのHTTPキャッシュ任せ
   if (url.origin !== self.location.origin) return;
 
-  if (isHtmlRequest(req, url)) {
-    // HTML: network-first（新版を即時反映）
-    event.respondWith(
-      fetch(req, { cache: 'no-store' })
-        .then((res) => {
-          if (res && res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
-          }
-          return res;
-        })
-        .catch(() =>
-          caches.match(req).then((c) => c || caches.match('./index.html'))
-        )
-    );
-    return;
-  }
-
-  // 静的アセット: cache-first（高速 + オフライン対応）
+  // cache-first: ヒットすればキャッシュ、無ければネットワークへ
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res && res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
-        }
-        return res;
-      });
-    })
+    caches.match(req).then((cached) => cached || fetch(req))
   );
 });

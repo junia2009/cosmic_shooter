@@ -3,7 +3,7 @@
 Three.js製の3D宇宙シューティングゲームです。  
 制限時間内に敵を撃破してハイスコアを目指そう！
 
-> **Ver.1.6.2** | [プレイする（GitHub Pages）](https://junia2009.github.io/cosmic_shooter/)
+> **Ver.1.6.3** | [プレイする（GitHub Pages）](https://junia2009.github.io/cosmic_shooter/)
 
 ## 特徴
 
