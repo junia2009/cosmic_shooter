@@ -284,6 +284,63 @@
     .item-time { color: #0ff; }
     .howto-note { font-size: 0.95em; color: #aaa; }
 
+    /* === モバイル操作オーバーレイ (FIRE) === */
+    #mobileControls {
+      position: fixed;
+      inset: 0;
+      z-index: 15;
+      display: none;
+      pointer-events: none;
+    }
+    #mobileControls.visible { display: block; }
+
+    #fireBtn {
+      position: absolute;
+      right: calc(22px + env(safe-area-inset-right, 0px));
+      bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 230, 120, 0.9);
+      background: radial-gradient(circle at 35% 30%, rgba(255, 200, 100, 0.7), rgba(220, 40, 40, 0.5) 75%);
+      color: #fff;
+      font-family: 'Orbitron', monospace;
+      font-size: 1.25em;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 8px #ff6, 0 0 14px #f80;
+      box-shadow: 0 0 24px rgba(255, 150, 40, 0.6), inset 0 -7px 18px rgba(0, 0, 0, 0.3);
+      pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+      cursor: pointer;
+      transition: transform 0.08s ease-out, box-shadow 0.15s ease-out;
+    }
+    #fireBtn:active,
+    #fireBtn.firing {
+      transform: scale(0.92);
+      background: radial-gradient(circle at 35% 30%, rgba(255, 240, 160, 0.85), rgba(255, 90, 60, 0.65) 75%);
+      box-shadow: 0 0 34px rgba(255, 200, 70, 0.95), inset 0 -3px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    /* HUD のモバイル調整 */
+    @media (max-width: 700px), (max-height: 500px) {
+      #score { font-size: 1.4em; top: 12px; }
+      #timer { font-size: 1.4em; top: 12px; right: 16px; }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      #fireBtn {
+        width: 92px;
+        height: 92px;
+        font-size: 1.05em;
+        right: calc(16px + env(safe-area-inset-right, 0px));
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      }
+    }
+
     /* === モバイル対応 === */
     @media (max-width: 700px) {
       .start-flex {
@@ -345,15 +402,16 @@
       <div class="start-main">
         <div id="title3d"></div>
         <div class="start-title">COSMIC SHOOTER</div>
-        <div class="version">Ver.1.5.0</div>
+        <div class="version">Ver.1.6.0</div>
         <div class="start-warning">横画面でプレイしてください</div>
         <button id="startBtn">START</button>
-        <div class="start-desc">画面タップ/クリックで移動・ショット</div>
+        <div class="start-desc">スマホ：ドラッグで移動 / FIREボタン長押しで連射</div>
       </div>
       <div class="howto-play">
         <b>【遊び方】</b><br>
-        ・マウス・タッチ操作で自機を移動<br>
-        ・クリック・タップ操作でショット<br>
+        ・ドラッグ（マウス・指）で自機を移動<br>
+        ・<b>スマホ：右下のFIREボタン</b>長押しで連射<br>
+        ・PC：クリックまたはSpaceキーで射撃<br>
         ・敵を倒してスコアを稼ごう！<br>
         ・アイテムを取ると効果発動：<br>
         　　<span class="item-bomb">●</span> 敵壊滅弾：画面内の敵を一掃
@@ -366,6 +424,11 @@
 
   <div id="score">0</div>
   <div id="timer">60</div>
+
+  <div id="mobileControls">
+    <button id="fireBtn" type="button" aria-label="FIRE">FIRE</button>
+  </div>
+
   <div id="resultOverlay">
     <div id="resultCard">
       <div class="result-title" id="resultTitle">GAME OVER</div>
@@ -409,9 +472,12 @@
   const STAGE_Y_MAX  = 8;
   const TIME_LIMIT   = 60;
   const TIME_MAX     = 99;
+  const FIRE_INTERVAL_MS = 130;
   const EXPLOSION_COLORS = [0xfff200, 0xff6600, 0xff2222, 0xffffff];
   const STAR_COLORS      = [0xffffff, 0xaaddff, 0xffd0a0, 0xaaffdd];
   const NEBULA_COLORS    = [0x110033, 0x002244, 0x001122, 0x220022];
+  const IS_TOUCH = (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+                   || ('ontouchstart' in window);
 
   // 敵タイプ定義: [hitDist, playerDist, score, speed]
   const ENEMY_DEFS = [
@@ -463,10 +529,33 @@
     badge.className = 'result-rank-badge rank-' + rank;
     document.getElementById('resultRankName').textContent = rankNames[rank] || '';
     document.getElementById('resultOverlay').classList.add('visible');
+    hideMobileControls();
   }
 
   function getViewportHeight() {
     return window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  }
+
+  /** カメラFOV/距離からスクリーン→ワールド座標のスケール（unit/pixel）を算出 */
+  function getUnitsPerPixel() {
+    const dist   = camera ? Math.abs(camera.position.z) : 13;
+    const fovDeg = camera ? camera.fov : 70;
+    const fovRad = fovDeg * Math.PI / 180;
+    const vh = Math.max(1, getViewportHeight());
+    const vw = Math.max(1, window.innerWidth);
+    const worldH = 2 * dist * Math.tan(fovRad / 2);
+    const worldW = worldH * (vw / vh);
+    return { x: worldW / vw, y: worldH / vh };
+  }
+
+  function showMobileControls() {
+    if (!IS_TOUCH) return;
+    const el = document.getElementById('mobileControls');
+    if (el) el.classList.add('visible');
+  }
+  function hideMobileControls() {
+    const el = document.getElementById('mobileControls');
+    if (el) el.classList.remove('visible');
   }
 
   function clearAllIntervals() {
@@ -692,6 +781,7 @@
     startCamera.position.set(0, 0, 14);
 
     startRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    startRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     startRenderer.setSize(sw, sh);
     startRenderer.domElement.style.position = 'fixed';
     startRenderer.domElement.style.top = '0';
@@ -990,6 +1080,7 @@
 
     // レンダラー
     renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
@@ -1052,6 +1143,9 @@
     }, 700);
     for (var i = 0; i < 4; i++) addEnemy();
 
+    // モバイル操作UI
+    showMobileControls();
+
     // 入力イベント
     setupInput();
   }
@@ -1060,23 +1154,54 @@
   //  入力
   // =========================================================
   function setupInput() {
-    // キーボード
+    // --- オートリピート射撃 ---
+    let autoFireTimerId = null;
+    function startAutoFire() {
+      if (autoFireTimerId || isGameOver) return;
+      shoot();
+      autoFireTimerId = setInterval(function () {
+        if (isGameOver) { stopAutoFire(); return; }
+        shoot();
+      }, FIRE_INTERVAL_MS);
+    }
+    function stopAutoFire() {
+      if (autoFireTimerId !== null) {
+        clearInterval(autoFireTimerId);
+        autoFireTimerId = null;
+      }
+    }
+
+    function isInteractiveTarget(target) {
+      return target && target.closest && target.closest('button, #mobileControls, #resultOverlay, #pauseOverlay');
+    }
+
+    // --- キーボード（PC）---
+    let spaceHeld = false;
     window.addEventListener('keydown', function (e) {
       if (isGameOver) return;
       if (e.code === 'ArrowLeft')  playerTargetX = Math.max(-STAGE_X, playerTargetX - 1.2);
       if (e.code === 'ArrowRight') playerTargetX = Math.min(STAGE_X, playerTargetX + 1.2);
       if (e.code === 'ArrowUp')    playerTargetY = Math.min(STAGE_Y_MAX, playerTargetY + 0.8);
       if (e.code === 'ArrowDown')  playerTargetY = Math.max(STAGE_Y_MIN, playerTargetY - 0.8);
-      if (e.code === 'Space') shoot();
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!spaceHeld) { spaceHeld = true; startAutoFire(); }
+      }
+    });
+    window.addEventListener('keyup', function (e) {
+      if (e.code === 'Space') { spaceHeld = false; stopAutoFire(); }
     });
 
-    // マウス
-    var mouseDown = false, mouseStartX = null, mouseStartY = null;
-    var mousePlayerStartX = null, mousePlayerStartY = null;
+    // --- マウス（PC：ドラッグで移動、クリックで単発射撃）---
+    let mouseDown = false, mouseStartX = 0, mouseStartY = 0;
+    let mousePlayerStartX = 0, mousePlayerStartY = 0;
+    let mouseDragged = false;
 
     window.addEventListener('mousedown', function (e) {
       if (isGameOver) return;
+      if (isInteractiveTarget(e.target)) return;
       mouseDown = true;
+      mouseDragged = false;
       mouseStartX = e.clientX;
       mouseStartY = e.clientY;
       mousePlayerStartX = playerTargetX;
@@ -1084,52 +1209,126 @@
     });
 
     window.addEventListener('mousemove', function (e) {
-      if (isGameOver || !mouseDown || mouseStartX === null) return;
-      var dx = (e.clientX - mouseStartX) / window.innerWidth * 40;
-      var dy = -(e.clientY - mouseStartY) / window.innerHeight * 16;
+      if (isGameOver || !mouseDown) return;
+      const s = getUnitsPerPixel();
+      const dx = (e.clientX - mouseStartX) * s.x;
+      const dy = -(e.clientY - mouseStartY) * s.y;
+      if (Math.abs(e.clientX - mouseStartX) + Math.abs(e.clientY - mouseStartY) > 6) {
+        mouseDragged = true;
+      }
       playerTargetX = clamp(mousePlayerStartX + dx, -STAGE_X, STAGE_X);
       playerTargetY = clamp(mousePlayerStartY + dy, STAGE_Y_MIN, STAGE_Y_MAX);
     });
 
-    window.addEventListener('mouseup', function () { mouseDown = false; });
-
-    window.addEventListener('click', function (e) {
-      if (isGameOver) return;
-      if (e.target === document.body || e.target === renderer.domElement) shoot();
+    window.addEventListener('mouseup', function (e) {
+      if (!mouseDown) return;
+      mouseDown = false;
+      if (!mouseDragged && !isGameOver && !isInteractiveTarget(e.target)) {
+        shoot();
+      }
     });
 
-    // タッチ
-    var touchStartX = null, touchStartY = null;
-    var touchPlayerStartX = null, touchPlayerStartY = null;
+    // --- タッチ（スマホ：1本目の指で移動、FIREボタンで連射）---
+    let moveTouchId = null;
+    let touchStartX = 0, touchStartY = 0;
+    let touchPlayerStartX = 0, touchPlayerStartY = 0;
+
+    function findTouch(touches, id) {
+      for (let i = 0; i < touches.length; i++) {
+        if (touches[i].identifier === id) return touches[i];
+      }
+      return null;
+    }
 
     window.addEventListener('touchstart', function (e) {
-      if (isGameOver || e.touches.length !== 1) return;
-      var t = e.touches[0];
-      touchStartX = t.clientX;
-      touchStartY = t.clientY;
-      touchPlayerStartX = playerTargetX;
-      touchPlayerStartY = playerTargetY;
-    });
+      if (isGameOver) return;
+      if (moveTouchId !== null) return;
+      // FIREボタン等のUIに触れた指は移動指として採用しない
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (isInteractiveTarget(t.target)) continue;
+        moveTouchId = t.identifier;
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+        touchPlayerStartX = playerTargetX;
+        touchPlayerStartY = playerTargetY;
+        break;
+      }
+    }, { passive: true });
 
     window.addEventListener('touchmove', function (e) {
-      if (isGameOver || e.touches.length !== 1 || touchStartX === null) return;
-      var t = e.touches[0];
-      var dx = (t.clientX - touchStartX) / window.innerWidth * 100;
-      var dy = -(t.clientY - touchStartY) / window.innerHeight * 40;
+      if (isGameOver || moveTouchId === null) return;
+      const t = findTouch(e.touches, moveTouchId);
+      if (!t) return;
+      const s = getUnitsPerPixel();
+      const dx = (t.clientX - touchStartX) * s.x;
+      const dy = -(t.clientY - touchStartY) * s.y;
       playerTargetX = clamp(touchPlayerStartX + dx, -STAGE_X, STAGE_X);
       playerTargetY = clamp(touchPlayerStartY + dy, STAGE_Y_MIN, STAGE_Y_MAX);
-    });
+    }, { passive: true });
 
-    window.addEventListener('touchend', function (e) {
-      if (isGameOver) return;
-      if (e.changedTouches.length === 1 && touchStartX !== null) {
-        var t = e.changedTouches[0];
-        if (Math.abs(t.clientX - touchStartX) < 15 && Math.abs(t.clientY - touchStartY) < 15) {
-          shoot();
+    function endMoveTouch(e) {
+      if (moveTouchId === null) return;
+      if (findTouch(e.touches, moveTouchId)) return;
+      moveTouchId = null;
+    }
+    window.addEventListener('touchend', endMoveTouch);
+    window.addEventListener('touchcancel', endMoveTouch);
+
+    // --- FIREボタン（タッチ長押し連射 + マウス長押し連射）---
+    const fireBtn = document.getElementById('fireBtn');
+    if (fireBtn) {
+      let firingByTouch = false;
+      let firingByMouse = false;
+
+      function fireOn() {
+        fireBtn.classList.add('firing');
+        startAutoFire();
+      }
+      function fireOff() {
+        if (!firingByTouch && !firingByMouse) {
+          fireBtn.classList.remove('firing');
+          stopAutoFire();
         }
       }
-      touchStartX = null;
-      touchStartY = null;
+
+      fireBtn.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isGameOver) return;
+        firingByTouch = true;
+        fireOn();
+      }, { passive: false });
+      const endFireTouch = function (e) {
+        e.preventDefault();
+        firingByTouch = false;
+        fireOff();
+      };
+      fireBtn.addEventListener('touchend', endFireTouch, { passive: false });
+      fireBtn.addEventListener('touchcancel', endFireTouch, { passive: false });
+
+      fireBtn.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        if (isGameOver) return;
+        firingByMouse = true;
+        fireOn();
+      });
+      const endFireMouse = function () {
+        firingByMouse = false;
+        fireOff();
+      };
+      fireBtn.addEventListener('mouseup', endFireMouse);
+      fireBtn.addEventListener('mouseleave', endFireMouse);
+
+      fireBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    }
+
+    // ページ離脱時の保険
+    window.addEventListener('blur', function () {
+      stopAutoFire();
+      mouseDown = false;
+      spaceHeld = false;
+      if (fireBtn) fireBtn.classList.remove('firing');
     });
   }
 
@@ -1396,7 +1595,7 @@
   <script>
     // iOS長押し対策
     document.addEventListener('DOMContentLoaded', function () {
-      var ignoreSelectors = ['#startBtn', '#restartBtn', '#startScreen button'];
+      var ignoreSelectors = ['#startBtn', '#restartBtn', '#startScreen button', '#fireBtn', '#mobileControls'];
 
       document.body.addEventListener('touchstart', function (e) {
         for (var i = 0; i < ignoreSelectors.length; i++) {
